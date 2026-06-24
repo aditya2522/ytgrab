@@ -7,31 +7,24 @@ RUN npm ci
 COPY . .
 RUN npm run build
 
-# ---- Production image ----
-FROM node:20-slim
+# ---- Production image: use image that already has ffmpeg ----
+FROM jrottenberg/ffmpeg:4.4-ubuntu2004 AS production
 
-# Install dependencies
-RUN apt-get update && apt-get install -y \
-    python3 \
-    curl \
-    xz-utils \
+# Install Node.js
+RUN apt-get update && apt-get install -y curl \
+    && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    && apt-get install -y nodejs \
     && rm -rf /var/lib/apt/lists/*
-
-# Install ffmpeg static build (lightweight)
-RUN curl -L https://github.com/yt-dlp/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-linux64-gpl.tar.xz \
-    | tar -xJ --strip-components=2 -C /usr/local/bin --wildcards '*/bin/ffmpeg' '*/bin/ffprobe'
 
 # Install yt-dlp
 RUN curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o /usr/local/bin/yt-dlp \
-    && chmod a+rx /usr/local/bin/yt-dlp /usr/local/bin/ffmpeg /usr/local/bin/ffprobe
+    && chmod a+rx /usr/local/bin/yt-dlp
 
 WORKDIR /app
 
-# Install only production deps
 COPY package*.json ./
 RUN npm ci --omit=dev
 
-# Copy server + built frontend
 COPY server.js ./
 COPY --from=builder /app/dist ./dist
 
