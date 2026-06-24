@@ -36,10 +36,17 @@ const execFileAsync = promisify(execFile);
 const TMP_DIR = path.join(os.tmpdir(), "ytgrab");
 if (!fs.existsSync(TMP_DIR)) fs.mkdirSync(TMP_DIR, { recursive: true });
 const app = express();
-const PORT = 3001;
+const PORT = process.env.PORT || 3001;
 
 app.use(cors());
 app.use(express.json());
+
+// Serve built React frontend
+const __dirname = path.dirname(new URL(import.meta.url).pathname);
+const distPath = path.join(__dirname, "dist");
+if (fs.existsSync(distPath)) {
+  app.use(express.static(distPath));
+}
 
 /* -------------------------------------------------------------------------- */
 /*  Health                                                                    */
@@ -95,58 +102,6 @@ app.get("/api/info", async (req, res) => {
     });
   } catch (err) {
     console.error("[/api/info]", err.message);
-    res.status(500).json({ error: err.message });
-  }
-});
-
-/* -------------------------------------------------------------------------- */
-/*  Trending Videos                                                           */
-/* -------------------------------------------------------------------------- */
-
-let trendingCache = {
-  data: null,
-  expires: 0,
-};
-
-app.get("/api/trending", async (_req, res) => {
-  try {
-    if (
-      trendingCache.data &&
-      Date.now() < trendingCache.expires
-    ) {
-      return res.json(trendingCache.data);
-    }
-
-    const { stdout } = await execFileAsync(
-      "yt-dlp",
-      [
-        "--flat-playlist",
-        "--dump-single-json",
-        "https://www.youtube.com/feed/trending?bp=4gINGgt5dGQtdHJlbmRpbmc%3D",
-      ],
-      { maxBuffer: 20 * 1024 * 1024 }
-    );
-
-    const playlist = JSON.parse(stdout);
-
-    const videos = (playlist.entries || [])
-      .filter(v => v.id && v.title)
-      .slice(0, 8)
-      .map((v, i) => ({
-        id: v.id,
-        title: v.title,
-        author: v.channel || v.uploader || "Unknown",
-        rank: i + 1,
-      }));
-
-    trendingCache = {
-      data: videos,
-      expires: Date.now() + 30 * 60 * 1000,
-    };
-
-    res.json(videos);
-  } catch (err) {
-    console.error("[/api/trending]", err.message);
     res.status(500).json({ error: err.message });
   }
 });
@@ -290,6 +245,16 @@ function sanitize(title) {
 /* -------------------------------------------------------------------------- */
 /*  Start                                                                     */
 /* -------------------------------------------------------------------------- */
+
+// Catch-all: serve React frontend for non-API routes
+app.get("*", (_req, res) => {
+  const indexPath = path.join(__dirname, "dist", "index.html");
+  if (fs.existsSync(indexPath)) {
+    res.sendFile(indexPath);
+  } else {
+    res.status(404).send("Frontend not built. Run: npm run build");
+  }
+});
 
 app.listen(PORT, () => {
   console.log(`🚀 YTGrab backend running at http://localhost:${PORT}`);
