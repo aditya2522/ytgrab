@@ -10,16 +10,20 @@ RUN npm run build
 # ---- Production image ----
 FROM node:20-slim
 
-# Install yt-dlp, ffmpeg, python3
+# Install dependencies
 RUN apt-get update && apt-get install -y \
-    ffmpeg \
     python3 \
     curl \
+    xz-utils \
     && rm -rf /var/lib/apt/lists/*
+
+# Install ffmpeg static build (lightweight)
+RUN curl -L https://github.com/yt-dlp/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-linux64-gpl.tar.xz \
+    | tar -xJ --strip-components=2 -C /usr/local/bin --wildcards '*/bin/ffmpeg' '*/bin/ffprobe'
 
 # Install yt-dlp
 RUN curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o /usr/local/bin/yt-dlp \
-    && chmod a+rx /usr/local/bin/yt-dlp
+    && chmod a+rx /usr/local/bin/yt-dlp /usr/local/bin/ffmpeg /usr/local/bin/ffprobe
 
 WORKDIR /app
 
